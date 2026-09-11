@@ -1,0 +1,449 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>カフェ席観察</title>
+<style>
+:root{
+  --ink:#1c2128;         /* 文字＝アスファルト */
+  --ink-2:#5a626d;       /* 補助文字 */
+  --paper:#eef1f4;       /* 背景＝明るい路面 */
+  --card:#ffffff;
+  --line:#c9d0d8;        /* 路面の白線 */
+  --mark:#f2b705;        /* 路面標示の黄 */
+  --mark-ink:#3a2c00;
+  --ok:#0d7a5f;
+  --danger:#a63a2b;
+  --radius:10px;
+  --tap:56px;
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;background:var(--paper);color:var(--ink);
+  font-family:-apple-system,"Hiragino Sans","Hiragino Kaku Gothic ProN","BIZ UDPGothic","Yu Gothic UI",sans-serif;
+  font-size:17px;line-height:1.45;touch-action:manipulation}
+button{font:inherit;color:inherit;border:0;background:none;cursor:pointer}
+input,textarea{font:inherit;color:inherit}
+
+/* 骨格：上に読み上げ文、中に問い、下に固定の記録ボタン */
+.app{min-height:100vh;display:flex;flex-direction:column;padding-bottom:calc(var(--tap) + 28px + env(safe-area-inset-bottom))}
+header{position:sticky;top:0;z-index:5;background:var(--ink);color:#fff;padding:calc(10px + env(safe-area-inset-top)) 16px 10px}
+header .sentence{font-size:20px;font-weight:700;letter-spacing:.01em;min-height:1.45em}
+header .sentence .empty{color:#98a2ad;font-weight:500}
+header .sub{display:flex;justify-content:space-between;align-items:baseline;color:#c4ccd5;font-size:13px;margin-top:4px}
+header .sub b{color:var(--mark);font-weight:700}
+
+nav{display:flex;background:var(--card);border-bottom:2px solid var(--line)}
+nav button{flex:1;height:46px;font-weight:600;color:var(--ink-2);border-bottom:3px solid transparent;margin-bottom:-2px}
+nav button[aria-selected="true"]{color:var(--ink);border-bottom-color:var(--mark)}
+
+main{padding:12px 12px 8px}
+.pane{display:none}.pane.on{display:block}
+
+fieldset{border:0;margin:0 0 14px;padding:0}
+legend{padding:0;font-size:14px;color:var(--ink-2);margin-bottom:6px;display:flex;justify-content:space-between;width:100%}
+legend .req{color:var(--mark-ink);background:var(--mark);border-radius:4px;padding:0 6px;font-size:12px;font-weight:700}
+.seg{display:grid;gap:6px}
+.seg.c3{grid-template-columns:repeat(3,1fr)}
+.seg.c2{grid-template-columns:repeat(2,1fr)}
+.seg.c4{grid-template-columns:repeat(4,1fr)}
+.seg.c5{grid-template-columns:repeat(5,1fr)}
+.opt{min-height:var(--tap);background:var(--card);border:2px solid var(--line);border-radius:var(--radius);
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;padding:6px 4px;
+  font-size:14px;font-weight:600;line-height:1.2;text-align:center;color:var(--ink)}
+.opt small{font-weight:500;color:var(--ink-2);font-size:11.5px}
+.opt svg{width:44px;height:30px;display:block}
+.opt[aria-pressed="true"]{background:var(--ink);border-color:var(--ink);color:#fff}
+.opt[aria-pressed="true"] small{color:#c4ccd5}
+.opt[aria-pressed="true"] svg .p{fill:#fff}
+.opt[aria-pressed="true"] svg .s{stroke:var(--mark)}
+.opt:focus-visible{outline:3px solid var(--mark);outline-offset:2px}
+svg .s{stroke:var(--ink-2);stroke-width:2;stroke-dasharray:4 3;fill:none}
+svg .p{fill:var(--ink)}
+svg .d{fill:none;stroke:var(--ink);stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.opt[aria-pressed="true"] svg .d{stroke:#fff}
+
+.row{display:flex;gap:8px}
+.row input{flex:1;min-height:48px;border:2px solid var(--line);border-radius:var(--radius);background:var(--card);padding:0 12px;font-size:16px}
+.row .ghost{min-height:48px;padding:0 14px;border:2px solid var(--line);border-radius:var(--radius);background:var(--card);font-weight:600;font-size:14px;white-space:nowrap}
+textarea{width:100%;min-height:64px;border:2px solid var(--line);border-radius:var(--radius);background:var(--card);padding:8px 12px;font-size:16px;resize:vertical}
+.hint{font-size:13px;color:var(--ink-2);margin:4px 2px 0}
+
+.bar{position:fixed;left:0;right:0;bottom:0;padding:10px 12px calc(10px + env(safe-area-inset-bottom));
+  background:linear-gradient(to top,var(--paper) 70%,rgba(238,241,244,0));display:flex;gap:8px;z-index:5}
+.bar .save{flex:1;height:var(--tap);border-radius:var(--radius);background:var(--mark);color:var(--mark-ink);font-size:19px;font-weight:800;letter-spacing:.04em}
+.bar .save:disabled{background:var(--line);color:#7d8791}
+.bar .undo{width:var(--tap);height:var(--tap);border-radius:var(--radius);background:var(--card);border:2px solid var(--line);font-size:13px;font-weight:600;line-height:1.1}
+.bar .undo:disabled{color:#9aa3ad}
+
+.toast{position:fixed;left:50%;bottom:calc(var(--tap) + 26px + env(safe-area-inset-bottom));transform:translateX(-50%) translateY(10px);
+  background:var(--ok);color:#fff;padding:8px 16px;border-radius:999px;font-weight:700;font-size:15px;opacity:0;transition:opacity .18s,transform .18s;pointer-events:none;white-space:nowrap}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+@media (prefers-reduced-motion:reduce){.toast{transition:none}}
+
+/* 集計 */
+.card{background:var(--card);border:2px solid var(--line);border-radius:var(--radius);padding:12px 14px;margin-bottom:12px}
+.card h2{margin:0 0 8px;font-size:15px;color:var(--ink-2);font-weight:600}
+.pred{border-left:5px solid var(--mark);padding-left:10px;margin:0 0 10px;font-size:15px}
+.pred p{margin:0 0 4px}
+table{width:100%;border-collapse:collapse;font-size:14px}
+th,td{text-align:right;padding:6px 4px;border-bottom:1px solid var(--line);white-space:nowrap}
+th{font-weight:600;color:var(--ink-2)}
+th:first-child,td:first-child{text-align:left}
+td.hi{font-weight:800;background:#fff6d6}
+.toggle{display:flex;align-items:center;gap:8px;font-size:14px;margin:0 0 8px}
+.toggle input{width:22px;height:22px}
+.verdict{font-size:15px;margin:8px 0 0;padding:8px 10px;border-radius:8px;background:var(--paper)}
+
+/* 一覧 */
+.item{background:var(--card);border:2px solid var(--line);border-radius:var(--radius);padding:10px 12px;margin-bottom:8px;display:flex;gap:10px;align-items:flex-start}
+.item .body{flex:1;min-width:0}
+.item .t{font-weight:700}
+.item .m{font-size:13px;color:var(--ink-2);margin-top:2px;overflow-wrap:anywhere}
+.item .del{color:var(--danger);font-weight:700;font-size:13px;padding:6px 8px;border:2px solid #e4c9c4;border-radius:8px;background:#fff}
+.actions{display:flex;gap:8px;flex-wrap:wrap;margin:10px 0 14px}
+.actions button{min-height:44px;padding:0 14px;border:2px solid var(--line);border-radius:var(--radius);background:var(--card);font-weight:600;font-size:14px}
+.actions button.warn{color:var(--danger);border-color:#e4c9c4}
+.blank{color:var(--ink-2);text-align:center;padding:28px 12px;font-size:15px}
+</style>
+</head>
+<body>
+<div class="app">
+<header>
+  <div class="sentence" id="sentence"><span class="empty">人数と席の型を押すと、ここに一文で出ます</span></div>
+  <div class="sub"><span id="place-echo">場所は未入力</span><span>記録 <b id="count">0</b> 件</span></div>
+</header>
+
+<nav role="tablist">
+  <button role="tab" aria-selected="true" data-pane="rec">記録</button>
+  <button role="tab" aria-selected="false" data-pane="sum">集計</button>
+  <button role="tab" aria-selected="false" data-pane="list">一覧</button>
+</nav>
+
+<main>
+<!-- ========== 記録 ========== -->
+<section class="pane on" id="pane-rec">
+
+<fieldset>
+  <legend><span>人数</span><span class="req">必須</span></legend>
+  <div class="seg c3" data-key="party">
+    <button class="opt" data-v="1">1人</button>
+    <button class="opt" data-v="2">2人</button>
+    <button class="opt" data-v="3+">3人以上</button>
+  </div>
+</fieldset>
+
+<fieldset>
+  <legend><span>席の型（置かれている向き。上の破線が歩道）</span><span class="req">必須</span></legend>
+  <div class="seg c5" data-key="layout">
+    <button class="opt" data-v="通り向き">
+      <svg viewBox="0 0 44 30"><line class="s" x1="2" y1="5" x2="42" y2="5"/><circle class="p" cx="15" cy="21" r="4"/><circle class="p" cx="29" cy="21" r="4"/><path class="d" d="M15 15 l0 -5 M12 12 l3 -3 3 3 M29 15 l0 -5 M26 12 l3 -3 3 3"/></svg>
+      通り向き<small>横並び</small></button>
+    <button class="opt" data-v="向かい合い">
+      <svg viewBox="0 0 44 30"><line class="s" x1="2" y1="5" x2="42" y2="5"/><circle class="p" cx="13" cy="20" r="4"/><circle class="p" cx="31" cy="20" r="4"/><path class="d" d="M19 20 l4 0 M21 18 l2 2 -2 2 M25 20 l-4 0 M23 18 l-2 2 2 2"/></svg>
+      向かい合い<small>通りは横</small></button>
+    <button class="opt" data-v="縦相対">
+      <svg viewBox="0 0 44 30"><line class="s" x1="2" y1="5" x2="42" y2="5"/><circle class="p" cx="22" cy="13" r="4"/><circle class="p" cx="22" cy="26" r="3.5"/><path class="d" d="M22 18 l0 2 M20 19 l2 2 2 -2 M22 22 l0 -2 M20 21 l2 -2 2 2"/></svg>
+      縦相対<small>一人が通りに背</small></button>
+    <button class="opt" data-v="背向き">
+      <svg viewBox="0 0 44 30"><line class="s" x1="2" y1="5" x2="42" y2="5"/><circle class="p" cx="15" cy="16" r="4"/><circle class="p" cx="29" cy="16" r="4"/><path class="d" d="M15 22 l0 5 M12 25 l3 3 3 -3 M29 22 l0 5 M26 25 l3 3 3 -3"/></svg>
+      背向き<small>横並び</small></button>
+    <button class="opt" data-v="その他">
+      <svg viewBox="0 0 44 30"><line class="s" x1="2" y1="5" x2="42" y2="5"/><circle class="p" cx="14" cy="18" r="4"/><circle class="p" cx="30" cy="23" r="4"/></svg>
+      その他<small>メモに</small></button>
+  </div>
+</fieldset>
+
+<fieldset>
+  <legend><span>椅子を動かしたか（見えた範囲で）</span></legend>
+  <div class="seg c5" data-key="moved">
+    <button class="opt" data-v="動かしていない">そのまま</button>
+    <button class="opt" data-v="通り側へ">通り側へ<small>回した</small></button>
+    <button class="opt" data-v="通りから背けた">背けた<small>通りから</small></button>
+    <button class="opt" data-v="相手の方へ">相手の方へ<small>回した</small></button>
+    <button class="opt" data-v="見ていない">見ていない</button>
+  </div>
+</fieldset>
+
+<fieldset>
+  <legend><span>選べる状況だったか（空き席）</span></legend>
+  <div class="seg c4" data-key="vacancy">
+    <button class="opt" data-v="両方の型に空き">両方の型<small>に空き</small></button>
+    <button class="opt" data-v="片方だけ空き">片方だけ<small>空き</small></button>
+    <button class="opt" data-v="ほぼ満席">ほぼ満席</button>
+    <button class="opt" data-v="不明">不明</button>
+  </div>
+</fieldset>
+
+<fieldset>
+  <legend><span>席と歩道の間</span></legend>
+  <div class="seg c3" data-key="dist">
+    <button class="opt" data-v="接している">接している</button>
+    <button class="opt" data-v="3m以内">少し離れる<small>3m以内</small></button>
+    <button class="opt" data-v="3m以上">離れている<small>3m以上</small></button>
+  </div>
+</fieldset>
+
+<fieldset>
+  <legend><span>通行量</span></legend>
+  <div class="seg c3" data-key="flow">
+    <button class="opt" data-v="少">少ない</button>
+    <button class="opt" data-v="中">ふつう</button>
+    <button class="opt" data-v="多">多い</button>
+  </div>
+</fieldset>
+
+<fieldset>
+  <legend><span>場所（店名・通り名。次の記録にも残ります）</span></legend>
+  <div class="row">
+    <input id="place" list="places" placeholder="例：定禅寺通 ○○カフェ" autocomplete="off">
+    <datalist id="places"></datalist>
+    <button class="ghost" id="gps" type="button">位置を取る</button>
+  </div>
+  <div class="hint" id="gps-echo"></div>
+</fieldset>
+
+<fieldset>
+  <legend><span>メモ</span></legend>
+  <textarea id="note" placeholder="天気、席の材質、動かせる椅子か、目についたこと"></textarea>
+</fieldset>
+
+<p class="hint">時刻は保存時に自動で入ります（日本時間）。人数と席の型だけで記録できます。</p>
+</section>
+
+<!-- ========== 集計 ========== -->
+<section class="pane" id="pane-sum">
+  <div class="card">
+    <h2>先に書いた予測（模型 v0.4・第2便）</h2>
+    <div class="pred">
+      <p>一人客は通り向きの席に偏る。二人客は向かい合いの席に偏る。</p>
+      <p>外れ＝一人客に通り向きの偏りが出ない、または二人客が通り向きに偏る。</p>
+    </div>
+    <label class="toggle"><input type="checkbox" id="only-choice" checked>「両方の型に空き」だけで数える（選べた場面）</label>
+    <div id="crosstab"></div>
+    <div class="verdict" id="verdict"></div>
+  </div>
+  <div class="card">
+    <h2>椅子を動かした向き</h2>
+    <div id="movedtab"></div>
+  </div>
+  <div class="card">
+    <h2>場所ごとの件数</h2>
+    <div id="placetab"></div>
+  </div>
+</section>
+
+<!-- ========== 一覧 ========== -->
+<section class="pane" id="pane-list">
+  <div class="actions">
+    <button id="csv" type="button">CSVを保存</button>
+    <button id="copy" type="button">表としてコピー</button>
+    <button id="wipe" type="button" class="warn">全部消す</button>
+  </div>
+  <div id="list"></div>
+</section>
+</main>
+
+<div class="bar">
+  <button class="undo" id="undo" disabled>直前を<br>取消</button>
+  <button class="save" id="save" disabled>記録する</button>
+</div>
+<div class="toast" id="toast"></div>
+</div>
+
+<script>
+(function(){
+  const KEY='cafe-seat-obs-v1';
+  const FIELDS=['party','layout','moved','vacancy','dist','flow'];
+  const STICKY=['dist','flow'];           // 同じ場所で続けて記録するとき残す
+  let rows=[]; let cur={}; let gps=null; let storageOk=true;
+
+  // ---- 保存 ----
+  function load(){ try{ const s=localStorage.getItem(KEY); rows=s?JSON.parse(s):[]; }catch(e){ storageOk=false; rows=[]; } }
+  function persist(){ try{ localStorage.setItem(KEY,JSON.stringify(rows)); }catch(e){ storageOk=false; toast('端末に保存できません。CSVで書き出してください'); } }
+
+  // ---- 日本時間 ----
+  function jst(d){
+    const p=new Intl.DateTimeFormat('ja-JP',{timeZone:'Asia/Tokyo',year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false}).formatToParts(d);
+    const g=t=>p.find(x=>x.type===t).value;
+    return `${g('year')}-${g('month')}-${g('day')} ${g('hour')}:${g('minute')}:${g('second')}`;
+  }
+
+  // ---- 要素 ----
+  const $=id=>document.getElementById(id);
+  const sentence=$('sentence'), placeIn=$('place'), noteIn=$('note'), saveBtn=$('save'), undoBtn=$('undo');
+
+  // ---- 入力の反映 ----
+  document.querySelectorAll('.seg').forEach(seg=>{
+    seg.addEventListener('click',e=>{
+      const b=e.target.closest('.opt'); if(!b) return;
+      const key=seg.dataset.key, v=b.dataset.v;
+      if(cur[key]===v){ delete cur[key]; } else { cur[key]=v; }
+      paintSeg(seg); render();
+    });
+  });
+  function paintSeg(seg){
+    const key=seg.dataset.key;
+    seg.querySelectorAll('.opt').forEach(o=>o.setAttribute('aria-pressed', String(cur[key]===o.dataset.v)));
+  }
+  placeIn.addEventListener('input',render);
+
+  function render(){
+    const parts=[];
+    if(cur.party) parts.push(cur.party==='3+'?'3人以上':cur.party+'人客');
+    if(cur.layout) parts.push(cur.layout);
+    if(cur.moved && cur.moved!=='見ていない' && cur.moved!=='動かしていない') parts.push('椅子を'+cur.moved);
+    if(cur.vacancy && cur.vacancy!=='不明') parts.push(cur.vacancy);
+    if(cur.dist) parts.push('歩道と'+cur.dist);
+    if(cur.flow) parts.push('通行'+cur.flow);
+    sentence.innerHTML = parts.length ? parts.join('・') : '<span class="empty">人数と席の型を押すと、ここに一文で出ます</span>';
+    $('place-echo').textContent = placeIn.value.trim() ? placeIn.value.trim() : '場所は未入力';
+    $('count').textContent = rows.length;
+    saveBtn.disabled = !(cur.party && cur.layout);
+    undoBtn.disabled = rows.length===0;
+  }
+
+  // ---- 記録 ----
+  saveBtn.addEventListener('click',()=>{
+    if(!(cur.party && cur.layout)) return;
+    const now=new Date();
+    const r={ id:now.getTime(), time:jst(now), iso:now.toISOString(),
+      party:cur.party, layout:cur.layout, moved:cur.moved||'', vacancy:cur.vacancy||'', dist:cur.dist||'', flow:cur.flow||'',
+      place:placeIn.value.trim(), lat:gps?gps.lat:'', lon:gps?gps.lon:'', note:noteIn.value.trim() };
+    rows.push(r); persist();
+    const keep={}; STICKY.forEach(k=>{ if(cur[k]) keep[k]=cur[k]; });
+    cur=keep; noteIn.value='';
+    document.querySelectorAll('.seg').forEach(paintSeg);
+    render(); refreshPlaces(); toast('記録しました（'+rows.length+'件）');
+  });
+  undoBtn.addEventListener('click',()=>{
+    if(!rows.length) return;
+    const r=rows.pop(); persist();
+    FIELDS.forEach(k=>{ if(r[k]) cur[k]=r[k]; });
+    placeIn.value=r.place; noteIn.value=r.note;
+    document.querySelectorAll('.seg').forEach(paintSeg);
+    render(); toast('直前の記録を戻しました');
+  });
+
+  // ---- 場所の候補 ----
+  function refreshPlaces(){
+    const seen=new Set(); const dl=$('places'); dl.innerHTML='';
+    [...rows].reverse().forEach(r=>{ if(r.place && !seen.has(r.place)){ seen.add(r.place); const o=document.createElement('option'); o.value=r.place; dl.appendChild(o);} });
+  }
+
+  // ---- 位置 ----
+  $('gps').addEventListener('click',()=>{
+    if(!navigator.geolocation){ $('gps-echo').textContent='この端末では位置を取れません'; return; }
+    $('gps-echo').textContent='取得中';
+    navigator.geolocation.getCurrentPosition(p=>{
+      gps={lat:+p.coords.latitude.toFixed(5), lon:+p.coords.longitude.toFixed(5)};
+      $('gps-echo').textContent='位置 '+gps.lat+', '+gps.lon+'（以後の記録に付きます。取り直すまで同じ値）';
+    },()=>{ $('gps-echo').textContent='位置を取れませんでした。場所は手で入れてください'; },{enableHighAccuracy:true,timeout:8000});
+  });
+
+  // ---- タブ ----
+  document.querySelectorAll('nav [role=tab]').forEach(t=>t.addEventListener('click',()=>{
+    document.querySelectorAll('nav [role=tab]').forEach(x=>x.setAttribute('aria-selected','false'));
+    t.setAttribute('aria-selected','true');
+    document.querySelectorAll('.pane').forEach(p=>p.classList.remove('on'));
+    $('pane-'+t.dataset.pane).classList.add('on');
+    if(t.dataset.pane==='sum') summarize(); if(t.dataset.pane==='list') listRows();
+    window.scrollTo(0,0);
+  }));
+
+  // ---- 集計 ----
+  const LAYOUTS=['通り向き','向かい合い','縦相対','背向き','その他'];
+  $('only-choice').addEventListener('change',summarize);
+  function summarize(){
+    const only=$('only-choice').checked;
+    const src=rows.filter(r=>!only || r.vacancy==='両方の型に空き');
+    const grp={'1':'1人客','2':'2人客','3+':'3人以上'};
+    let h='<table><tr><th></th>'+LAYOUTS.map(l=>'<th>'+l+'</th>').join('')+'<th>計</th></tr>';
+    const cnt={};
+    Object.keys(grp).forEach(p=>{
+      const rs=src.filter(r=>r.party===p); const n=rs.length; cnt[p]={};
+      let mx=0; LAYOUTS.forEach(l=>{ cnt[p][l]=rs.filter(r=>r.layout===l).length; mx=Math.max(mx,cnt[p][l]); });
+      h+='<tr><td>'+grp[p]+'</td>'+LAYOUTS.map(l=>{ const c=cnt[p][l]; const pct=n?Math.round(100*c/n):0;
+        return '<td class="'+(n&&c===mx&&c>0?'hi':'')+'">'+c+(n?'<br><small>'+pct+'%</small>':'')+'</td>'; }).join('')+'<td>'+n+'</td></tr>';
+    });
+    h+='</table>';
+    $('crosstab').innerHTML = src.length? h : '<p class="blank">まだ数える記録がありません'+(only?'（「両方の型に空き」の記録がないときは、上のチェックを外すと全件で数えます）':'')+'</p>';
+    // 判定の読み上げ（件数が少ないうちは断定しない）
+    const n1=src.filter(r=>r.party==='1').length, n2=src.filter(r=>r.party==='2').length;
+    let v='';
+    if(n1<10||n2<10){ v='一人客 '+n1+'件・二人客 '+n2+'件。どちらも10件を超えるまで当たり外れは言いません。'; }
+    else{
+      const s1=cnt['1']['通り向き']/n1, s2=cnt['2']['通り向き']/n2, f2=cnt['2']['向かい合い']/n2;
+      const a = s1>0.5, b = f2>s2;
+      v='一人客の通り向き '+Math.round(s1*100)+'%／二人客の通り向き '+Math.round(s2*100)+'%・向かい合い '+Math.round(f2*100)+'%。';
+      v+= (a&&b)?' 予測の向きと合っています。':(!a&&!b)?' 予測と逆です（両方外れ）。':' 半分だけ合っています（'+(a?'一人客は当たり・二人客が外れ':'二人客は当たり・一人客が外れ')+'）。';
+      v+=' 店の置き方が固定なら、この数は客の好みでなく置き方を写している可能性があります。椅子を動かした向きの表と併せて読んでください。';
+    }
+    $('verdict').textContent=v;
+
+    // 椅子の動き
+    const mv=['動かしていない','通り側へ','通りから背けた','相手の方へ','見ていない'];
+    let m='<table><tr><th></th>'+mv.map(x=>'<th>'+x+'</th>').join('')+'</tr>';
+    Object.keys(grp).forEach(p=>{ const rs=rows.filter(r=>r.party===p); m+='<tr><td>'+grp[p]+'</td>'+mv.map(x=>'<td>'+rs.filter(r=>r.moved===x).length+'</td>').join('')+'</tr>'; });
+    m+='</table>';
+    $('movedtab').innerHTML = rows.some(r=>r.moved)? m : '<p class="blank">椅子の動きの記録はまだありません</p>';
+
+    // 場所
+    const pc={}; rows.forEach(r=>{ const k=r.place||'（場所なし）'; pc[k]=(pc[k]||0)+1; });
+    const keys=Object.keys(pc).sort((a,b)=>pc[b]-pc[a]);
+    $('placetab').innerHTML = keys.length? '<table>'+keys.map(k=>'<tr><td>'+esc(k)+'</td><td>'+pc[k]+'</td></tr>').join('')+'</table>' : '<p class="blank">まだ記録がありません</p>';
+  }
+
+  // ---- 一覧 ----
+  function listRows(){
+    const el=$('list');
+    if(!rows.length){ el.innerHTML='<p class="blank">記録はまだありません。「記録」から始めてください。</p>'; return; }
+    el.innerHTML=[...rows].reverse().map(r=>{
+      const t=[(r.party==='3+'?'3人以上':r.party+'人客'), r.layout, r.moved&&r.moved!=='見ていない'&&r.moved!=='動かしていない'?'椅子を'+r.moved:''].filter(Boolean).join('・');
+      const m=[r.time, r.place, r.vacancy, r.dist?'歩道と'+r.dist:'', r.flow?'通行'+r.flow:'', r.note].filter(Boolean).join(' / ');
+      return '<div class="item"><div class="body"><div class="t">'+esc(t)+'</div><div class="m">'+esc(m)+'</div></div><button class="del" data-id="'+r.id+'">消す</button></div>';
+    }).join('');
+  }
+  $('list').addEventListener('click',e=>{
+    const b=e.target.closest('.del'); if(!b) return;
+    if(!confirm('この記録を消しますか')) return;
+    rows=rows.filter(r=>String(r.id)!==b.dataset.id); persist(); listRows(); render(); toast('消しました');
+  });
+  $('wipe').addEventListener('click',()=>{
+    if(!rows.length) return;
+    if(!confirm(rows.length+'件すべて消します。CSVを保存してありますか？')) return;
+    if(!confirm('本当に消しますか（元に戻せません）')) return;
+    rows=[]; persist(); listRows(); render(); summarize(); toast('全部消しました');
+  });
+
+  // ---- 書き出し ----
+  const HEAD=['時刻JST','人数','席の型','椅子の動き','空き','歩道との間','通行量','場所','緯度','経度','メモ','ISO'];
+  const cell=r=>[r.time,r.party,r.layout,r.moved,r.vacancy,r.dist,r.flow,r.place,r.lat,r.lon,r.note,r.iso];
+  $('csv').addEventListener('click',()=>{
+    if(!rows.length){ toast('記録がありません'); return; }
+    const q=s=>'"'+String(s).replace(/"/g,'""')+'"';
+    const body=[HEAD.map(q).join(','), ...rows.map(r=>cell(r).map(q).join(','))].join('\r\n');
+    const blob=new Blob(['\ufeff'+body],{type:'text/csv;charset=utf-8'});
+    const a=document.createElement('a'); a.href=URL.createObjectURL(blob);
+    a.download='カフェ席観察_'+jst(new Date()).replace(/[-: ]/g,'').slice(0,12)+'.csv'; document.body.appendChild(a); a.click();
+    setTimeout(()=>{URL.revokeObjectURL(a.href); a.remove();},500);
+  });
+  $('copy').addEventListener('click',async()=>{
+    if(!rows.length){ toast('記録がありません'); return; }
+    const body=[HEAD.join('\t'), ...rows.map(r=>cell(r).join('\t'))].join('\n');
+    try{ await navigator.clipboard.writeText(body); toast('表をコピーしました'); }
+    catch(e){ prompt('コピーできませんでした。ここから選択してください', body); }
+  });
+
+  // ---- 補助 ----
+  function esc(s){ return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+  let tt; function toast(msg){ const t=$('toast'); t.textContent=msg; t.classList.add('show'); clearTimeout(tt); tt=setTimeout(()=>t.classList.remove('show'),1600); }
+
+  load(); refreshPlaces(); render();
+  if(!storageOk) toast('この開き方では端末に保存されません。CSVで書き出してください');
+})();
+</script>
+</body>
+</html>
